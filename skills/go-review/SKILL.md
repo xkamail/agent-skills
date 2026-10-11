@@ -140,7 +140,7 @@ Add this block to the subagent prompt:
 
 ### Validation (`Valid()` method)
 - Use `github.com/moonrhythm/validator`: `v := validator.New()`, one or more `v.Must(cond, "message")` calls (or `v.Mustf(cond, "message %d", i)` for messages with loop indices), then `return v.Error()`
-- Field normalization (`strings.TrimSpace`, `strings.ToUpper`, etc.) happens inline at the top of `Valid()`, mutating `p`'s fields directly, before the `v.Must` checks that depend on it
+- Field normalization (`strings.TrimSpace`, `strings.ToUpper`, etc.) happens inline at the top of `Valid()`, mutating `p`'s fields directly (so `Valid()` needs a pointer receiver: `func (p *XxxParams) Valid() error`), before the `v.Must` checks that depend on it
 - Use `github.com/asaskevich/govalidator` helpers inside `v.Must(...)` for format checks: `govalidator.IsEmail`, `IsURL`, `IsNumeric`, `IsLowerCase`, etc. — don't hand-roll regex for these
 - Nested/composed param structs (e.g. `p.Sort`, `p.Paginate`) delegate via `if err := p.Sort.Valid(); err != nil { return err }` rather than re-checking their fields inline
 - Fixed-length ID fields check exact length (`len(p.ID) == 20`), not just `> 0`
@@ -234,6 +234,7 @@ Baseline from [Effective Go](https://go.dev/doc/effective_go) + [Go Code Review 
 - `append` may reallocate — always assign the result back (`s = append(s, x)`); appending to a sub-slice that shares a backing array with a live slice silently overwrites it → 🔴.
 - Map/type-assertion misses return the zero value; use comma-ok when zero is a valid value (`qty, ok := m[id]`).
 - Receivers: pointer if any method mutates or the struct is large/holds a mutex; then **all** methods use pointer receivers — mixed receiver kinds on one type → 🟢. Never copy a struct containing `sync.Mutex`/`sync.WaitGroup` (value receiver, range copy, pass by value) → 🔴.
+- A method that assigns to receiver fields (`p.UID = strings.TrimSpace(p.UID)`, `p.Quantity = 1`) must use a pointer receiver — on a value receiver it mutates a copy and the change is silently lost to the caller → 🔴. Same for passing a struct by value to a func that edits it.
 - Zero value should be useful: prefer structs that work without a constructor; don't add `NewX()` that only returns `&X{}`.
 - `iota` enums get a `String()` via `stringer` (`//go:generate stringer`, `make generate`), not a hand-written switch.
 - A `String()` method that formats its own receiver with `%v`/`%s` (`fmt.Sprintf("%v", t)`) recurses forever → 🔴; convert first (`string(t)`, or a field).
