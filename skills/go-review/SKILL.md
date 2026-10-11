@@ -234,7 +234,12 @@ Baseline from [Effective Go](https://go.dev/doc/effective_go) + [Go Code Review 
 - `append` may reallocate — always assign the result back (`s = append(s, x)`); appending to a sub-slice that shares a backing array with a live slice silently overwrites it → 🔴.
 - Map/type-assertion misses return the zero value; use comma-ok when zero is a valid value (`qty, ok := m[id]`).
 - Receivers: pointer if any method mutates or the struct is large/holds a mutex; then **all** methods use pointer receivers — mixed receiver kinds on one type → 🟢. Never copy a struct containing `sync.Mutex`/`sync.WaitGroup` (value receiver, range copy, pass by value) → 🔴.
-- A method that assigns to receiver fields (`p.UID = strings.TrimSpace(p.UID)`, `p.Quantity = 1`) must use a pointer receiver — on a value receiver it mutates a copy and the change is silently lost to the caller → 🔴. Same for passing a struct by value to a func that edits it.
+- **Writes to a copy are silently lost** → 🔴. Any field assignment must go through a pointer to the original, or the copy must be written back. Watch for:
+  - value receiver that sets fields (`func (p Params) Valid()` doing `p.UID = strings.TrimSpace(p.UID)`) → make it `*Params`
+  - struct/array passed by value to a func that edits it, with the caller expecting the change
+  - range loop var: `for _, it := range items { it.Status = x }` → index instead (`items[i].Status = x`) or range over `[]*T`
+  - map of struct values: `v := m[k]; v.N++` without `m[k] = v`
+  - local copy of a field/element/getter result (`cfg := s.cfg; cfg.Timeout = t`, `u := users[0]; u.Name = n`) edited as if it were the original
 - Zero value should be useful: prefer structs that work without a constructor; don't add `NewX()` that only returns `&X{}`.
 - `iota` enums get a `String()` via `stringer` (`//go:generate stringer`, `make generate`), not a hand-written switch.
 - A `String()` method that formats its own receiver with `%v`/`%s` (`fmt.Sprintf("%v", t)`) recurses forever → 🔴; convert first (`string(t)`, or a field).
